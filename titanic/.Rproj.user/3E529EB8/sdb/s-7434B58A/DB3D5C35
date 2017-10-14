@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "---\ntitle: \"Titanic - Machine Learning from Disaster\"\nauthor: \"Wal McConnell\"\ndate: \"13 October 2017\"\noutput: html_document\n---\n\n```{r setup, include=FALSE}\nknitr::opts_chunk$set(echo = TRUE)\n\n```\n\n## R Markdown\n\n\n```{r cars}\nsummary(cars)\n```\n",
+    "created" : 1507913136000.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "4004400683",
+    "id" : "DB3D5C35",
+    "lastKnownWriteTime" : 1507913273,
+    "last_content_update" : 1507913273486,
+    "path" : "~/projects/wal/kaggle/titanic/R/Titanic.Rmd",
+    "project_path" : "R/Titanic.Rmd",
+    "properties" : {
+        "last_setup_crc32" : "",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}
