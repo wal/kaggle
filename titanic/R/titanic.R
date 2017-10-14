@@ -1,10 +1,10 @@
 # https://www.kaggle.com/c/titanic
+# http://trevorstephens.com/kaggle-titanic-tutorial/getting-started-with-r/
 
 library(tidyverse)
 
 train <- read.csv('data/train.csv')
 test <- read.csv('data/test.csv')
-
 
 str(train)
 table(train$Survived)
@@ -54,7 +54,7 @@ aggregate(
 )
 
 
-# Submission #4 - Imact of Fare and pClass
+# Submission #4 - Impact of Fare and pClass
 
 summary(train$Fare)
 fare_category <- function(fare) {
@@ -155,17 +155,9 @@ combined$Title[combined$Title %in% c('Dona', 'Lady', 'the Countess', 'Jonkheer')
 
 combined$Title <- factor(combined$Title)
 
-
-
 combined$FamilySize <- combined$SibSp + combined$Parch + 1
-
-
-
 combined$Surname <- sapply(combined$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][1]})
-
 combined$FamilyID <- paste(as.character(combined$FamilySize), combined$Surname, sep="")
-
-
 
 combined$FamilyID[combined$FamilySize <= 2] <- 'Small'
 table(combined$FamilyID)
@@ -196,3 +188,81 @@ write.csv(
   row.names = FALSE
 )
 
+
+
+# Submission 5 - Random Forests
+# Grow a lot of different models, and let their outcomes be averaged or voted across the group.
+
+# Bagging 
+sample(1:10, replace = TRUE)
+sample(1:10, replace = FALSE)
+
+
+summary(combined$Age)
+
+Agefit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + FamilySize,
+                data=combined[!is.na(combined$Age),], 
+                method="anova")
+combined$Age[is.na(combined$Age)] <- predict(Agefit, combined[is.na(combined$Age),])
+
+
+summary(combined)
+
+which(combined$Embarked == '')
+combined$Embarked[c(62,830)] = "S"
+combined$Embarked <- factor(combined$Embarked)
+which(is.na(combined$Fare))
+combined$Fare[1044] <- median(combined$Fare, na.rm=TRUE)
+
+str(combined)
+
+
+combined$FamilyID2 <- combined$FamilyID
+combined$FamilyID2 <- as.character(combined$FamilyID2)
+combined$FamilyID2[combined$FamilySize <= 3] <- 'Small'
+combined$FamilyID2 <- factor(combined$FamilyID2)
+
+summary(combined)
+
+library(randomForest)
+set.seed(415)
+
+
+train <- combined[1:891,]
+test <- combined[892:1309,]
+
+
+fit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare +
+                      Embarked + Title + FamilySize + FamilyID2,
+                    data=train, 
+                    importance=TRUE, 
+                    ntree=2000)
+varImpPlot(fit)
+
+Prediction <- predict(fit, test)
+submit <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(
+  submit %>% select(PassengerId, Survived),
+  'results/submit_6-random_forest.csv',
+  row.names = FALSE
+)
+
+
+# Submission 6 - Conditional Inference Trees
+
+library(party)
+
+set.seed(415)
+fit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare +
+                   Embarked + Title + FamilySize + FamilyID,
+                 data = train, 
+                 controls=cforest_unbiased(ntree=2000, mtry=3))
+
+
+Prediction <- predict(fit, test, OOB=TRUE, type = "response")
+submit <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(
+  submit %>% select(PassengerId, Survived),
+  'results/submit_7-conditional_inference_tree.csv',
+  row.names = FALSE
+)
