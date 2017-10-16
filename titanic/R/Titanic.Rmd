@@ -1,0 +1,232 @@
+---
+title: 'Titanic: Machine Learning from Disaster'
+author: "Wal McConnell"
+date: "16 October 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+create_submission_file <- function(dataset, filename) {
+  write.csv(dataset %>% select(PassengerId, Survived), 
+            paste('../attempts/', filename, sep = ''), row.names = FALSE)
+}
+
+```
+
+https://www.kaggle.com/c/titanic
+
+
+## Load & Explore Training & Test Datasets
+
+```{r}
+
+train <- read.csv('../data/train.csv')
+test <- read.csv('../data/test.csv')
+
+str(train)
+table(train$Survived)
+round(prop.table(table(train$Survived)) * 100, 0)
+str(data)
+```
+
+## Attempt #1 : Everyone Dies!
+
+Simply mark everyone in the test data as Dead
+
+```{r}
+submission <- test %>% mutate(Survived = 0) 
+
+create_submission_file(submission, 'attempt_1-everyone_dies.csv')
+```
+
+Your submission scored 0.62679
+
+## Attempt #2 - Impact of the Sex Attribute
+
+```{r}
+summary(train$Sex)
+prop.table(table(train$Sex, train$Survived)) * 100
+prop.table(table(train$Sex, train$Survived), 1) * 100
+prop.table(table(train$Sex, train$Survived), 2) * 100
+
+aggregate(data = train, Survived ~ Sex, length)
+
+submission <- test %>% mutate(Survived = ifelse(Sex == 'male', 0, 1))
+
+create_submission_file(submission, 'attempt_2-all-men-die.csv')
+```
+
+Your submission scored 0.76555
+
+## Attempt 3 - Sex & Class
+
+
+```{r}
+
+summary(train$Pclass)
+
+aggregate(Survived ~ Pclass + Sex, data = train, FUN = mean)
+
+survived <- function(sex, pclass) {
+  if (sex == 'female') {
+    return(ifelse(pclass != 3, 1, 0))
+  } else {
+    return(ifelse(pclass == 1, 1, 0))
+  }
+}
+
+submission <- test %>%
+  rowwise() %>%
+  mutate(Survived = survived(Sex, Pclass))
+
+create_submission_file(submission, 'attempt_3-sex-class-fare.csv')
+
+```
+
+
+Your submission scored 0.69856
+
+
+## Attempt 4 - Decision Tree
+
+```{r}
+
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+
+
+fit <-
+  rpart(
+    Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked,
+    data = train,
+    method = 'class'
+  )
+
+fancyRpartPlot(fit)
+
+Prediction <- predict(fit, test, type = "class")
+
+submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+
+create_submission_file(submission, 'attempt_4-decision_tree.csv')
+
+```
+Your submission scored 0.78468
+
+
+## Attempt 5 - Decision Tree w/Feature Engineering
+
+```{r}
+#train <- read.csv('../data/train.csv')
+#test <- read.csv('../data/test.csv')
+
+test$Survived <- NA
+combined <- rbind(train, test)
+combined$Name <- as.character(combined$Name)
+combined$Name[1]
+
+
+# Refactor with stringr/tidyr
+combined$Title <- sapply(combined$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][2]})
+combined$Title <- sub(' ', '', combined$Title)
+
+table(combined$Title)
+
+combined$Title[combined$Title %in% c('Mme', 'Mlle')] <- 'Mlle'
+combined$Title[combined$Title %in% c('Capt', 'Don', 'Major', 'Sir')] <- 'Sir'
+combined$Title[combined$Title %in% c('Dona', 'Lady', 'the Countess', 'Jonkheer')] <- 'Lady'
+
+combined$Title <- factor(combined$Title)
+
+combined$FamilySize <- combined$SibSp + combined$Parch + 1
+combined$Surname <- sapply(combined$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][1]})
+combined$FamilyID <- paste(as.character(combined$FamilySize), combined$Surname, sep="")
+
+combined$FamilyID[combined$FamilySize <= 2] <- 'Small'
+table(combined$FamilyID)
+
+famIDs <- data.frame(table(combined$FamilyID))
+famIDs <- famIDs[famIDs$Freq <= 2,]
+
+combined$FamilyID[combined$FamilyID %in% famIDs$Var1] <- 'Small'
+combined$FamilyID <- factor(combined$FamilyID)
+
+train <- combined[1:891,]
+test <- combined[892:1309,]
+
+fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked + Title + FamilySize + FamilyID,
+             data=train, 
+             method="class")
+
+fancyRpartPlot(fit)
+
+Prediction <- predict(fit, test, type = "class")
+
+submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+create_submission_file(submission, 'attempt_5-decision_tree-feature-engineering.csv')
+```
+
+Your submission scored 0.79425
+
+## Attempt 6 - Random Forrest
+
+```{r}
+# Bagging 
+sample(1:10, replace = TRUE)
+sample(1:10, replace = FALSE)
+
+
+summary(combined$Age)
+
+Agefit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + FamilySize,
+                data=combined[!is.na(combined$Age),], 
+                method="anova")
+combined$Age[is.na(combined$Age)] <- predict(Agefit, combined[is.na(combined$Age),])
+
+
+summary(combined)
+
+which(combined$Embarked == '')
+combined$Embarked[c(62,830)] = "S"
+combined$Embarked <- factor(combined$Embarked)
+which(is.na(combined$Fare))
+combined$Fare[1044] <- median(combined$Fare, na.rm=TRUE)
+
+str(combined)
+
+
+combined$FamilyID2 <- combined$FamilyID
+combined$FamilyID2 <- as.character(combined$FamilyID2)
+combined$FamilyID2[combined$FamilySize <= 3] <- 'Small'
+combined$FamilyID2 <- factor(combined$FamilyID2)
+
+summary(combined)
+
+library(randomForest)
+set.seed(415)
+
+
+train <- combined[1:891,]
+test <- combined[892:1309,]
+
+
+fit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare +
+                      Embarked + Title + FamilySize + FamilyID2,
+                    data=train, 
+                    importance=TRUE, 
+                    ntree=2000)
+varImpPlot(fit)
+
+Prediction <- predict(fit, test)
+
+submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+create_submission_file(submission, 'attempt_6-random-forrest.csv')
+```
+
+Your submission scored 0.77511
+
