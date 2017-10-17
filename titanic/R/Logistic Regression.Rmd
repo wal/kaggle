@@ -1,0 +1,67 @@
+---
+title: 'Titanic: Machine Learning from Disaster - Logistic Regression'
+author: "Wal McConnell"
+date: "16 October 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+create_submission_file <- function(dataset, filename) {
+  write.csv(dataset %>% select(PassengerId, Survived), 
+            paste('../attempts/', filename, sep = ''), row.names = FALSE)
+}
+
+```
+
+https://www.kaggle.com/c/titanic
+
+
+## Load & Explore Training & Test Datasets
+
+```{r}
+
+train <- read.csv('../data/train.csv')
+test <- read.csv('../data/test.csv')
+
+str(train)
+table(train$Survived)
+round(prop.table(table(train$Survived)) * 100, 0)
+str(data)
+```
+
+
+## Attempt 7 - Logistic Regression
+
+
+```{r}
+
+train <- train %>% 
+  select(Survived, Pclass, Sex, Age, SibSp, Parch, Fare)
+
+train$Sex <- as.numeric(train$Sex)
+test$Sex <- as.numeric(test$Sex)
+
+cor(train)
+```
+
+Model 
+
+```{r}
+model <- glm(Survived ~ ., family = binomial(link = "logit"), data = train)
+summary(model)
+
+model <- glm(Survived ~ . - Parch - Fare, family = binomial(link = "logit"), data = train)
+summary(model)
+```
+
+```{r}
+prediction <- predict(model, type = "response", newdata = test)
+test$Survived <- as.numeric(prediction >= 0.5)
+
+create_submission_file(test, 'attempt_7-logistic-regression.csv')
+```
+
+Your submission scored 0.75598

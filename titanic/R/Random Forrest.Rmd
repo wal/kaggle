@@ -1,0 +1,115 @@
+---
+title: 'Titanic: Machine Learning from Disaster - Random Forrest'
+author: "Wal McConnell"
+date: "16 October 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+
+create_submission_file <- function(dataset, filename) {
+  write.csv(dataset %>% select(PassengerId, Survived), 
+            paste('../attempts/', filename, sep = ''), row.names = FALSE)
+}
+
+```
+
+https://www.kaggle.com/c/titanic
+
+
+## Load & Explore Training & Test Datasets
+
+```{r}
+
+train <- read.csv('../data/train.csv')
+test <- read.csv('../data/test.csv')
+
+str(train)
+table(train$Survived)
+round(prop.table(table(train$Survived)) * 100, 0)
+str(data)
+```
+
+
+
+## Attempt 6 - Random Forrest
+
+
+```{r}
+library(rpart)
+
+test$Survived <- NA
+combined <- rbind(train, test)
+combined$Name <- as.character(combined$Name)
+combined$Name[1]
+
+
+combined$Title <- sapply(combined$Name, FUN=function(x) {strsplit(x, split='[,.]')[[1]][2]})
+combined$Title <- sub(' ', '', combined$Title)
+
+table(combined$Title)
+
+combined$Title[combined$Title %in% c('Mme', 'Mlle')] <- 'Mlle'
+combined$Title[combined$Title %in% c('Capt', 'Don', 'Major', 'Sir')] <- 'Sir'
+combined$Title[combined$Title %in% c('Dona', 'Lady', 'the Countess', 'Jonkheer')] <- 'Lady'
+
+combined$Title <- factor(combined$Title)
+
+combined$FamilySize <- combined$SibSp + combined$Parch + 1
+combined$FamilyID <- paste(as.character(combined$FamilySize), combined$Surname, sep="")
+
+# Bagging 
+sample(1:10, replace = TRUE)
+sample(1:10, replace = FALSE)
+
+
+summary(combined$Age)
+
+Agefit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked + Title + FamilySize,
+                data=combined[!is.na(combined$Age),], 
+                method="anova")
+combined$Age[is.na(combined$Age)] <- predict(Agefit, combined[is.na(combined$Age),])
+
+
+summary(combined)
+
+which(combined$Embarked == '')
+combined$Embarked[c(62,830)] = "S"
+combined$Embarked <- factor(combined$Embarked)
+which(is.na(combined$Fare))
+combined$Fare[1044] <- median(combined$Fare, na.rm=TRUE)
+
+str(combined)
+
+
+combined$FamilyID2 <- combined$FamilyID
+combined$FamilyID2 <- as.character(combined$FamilyID2)
+combined$FamilyID2[combined$FamilySize <= 3] <- 'Small'
+combined$FamilyID2 <- factor(combined$FamilyID2)
+
+summary(combined)
+
+library(randomForest)
+set.seed(415)
+
+
+train <- combined[1:891,]
+test <- combined[892:1309,]
+
+
+fit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare +
+                      Embarked + Title + FamilySize + FamilyID2,
+                    data=train, 
+                    importance=TRUE, 
+                    ntree=2000)
+varImpPlot(fit)
+
+Prediction <- predict(fit, test)
+
+submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+create_submission_file(submission, 'attempt_6-random-forrest.csv')
+```
+
+Your submission scored 0.77511
