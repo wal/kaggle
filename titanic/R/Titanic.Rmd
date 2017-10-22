@@ -26,11 +26,36 @@ https://www.kaggle.com/c/titanic
 train <- read.csv('../data/train.csv')
 test <- read.csv('../data/test.csv')
 
+result_data <- read.csv('../data/gender_submission.csv')
+
 str(train)
-table(train$Survived)
-round(prop.table(table(train$Survived)) * 100, 0)
-str(data)
 ```
+
+
+
+
+```{r}
+table(train$Survived)
+prop.table(table(train$Survived))
+
+```
+
+
+### Impact of Sex v Survival ?
+
+```{r}
+table(train$Sex, train$Survived)
+prop.table(table(train$Sex, train$Survived), 1)
+```
+
+# Impact of Children v Adults ?
+
+```{r}
+train <- train %>% mutate(Child = ifelse(Age < 18, 1, 0))
+summary(train$Child)
+```
+
+
 
 ## Attempt #1 : Everyone Dies!
 
@@ -89,4 +114,12 @@ create_submission_file(submission, 'attempt_3-sex-class-fare.csv')
 
 
 Your submission scored 0.69856
+
+
+```{r}
+library(caret)
+
+confusionMatrix(submission$Survived, result_data$Survived)
+
+```
 
