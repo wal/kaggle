@@ -130,6 +130,8 @@ $(document).ready(function () {
 <pre class="r"><code>train &lt;- read.csv('../data/train.csv')
 test &lt;- read.csv('../data/test.csv')
 
+result_data &lt;- read.csv('../data/gender_submission.csv')
+
 str(train)</code></pre>
 <pre><code>## 'data.frame':    891 obs. of  12 variables:
 ##  $ PassengerId: int  1 2 3 4 5 6 7 8 9 10 ...
@@ -148,14 +150,30 @@ str(train)</code></pre>
 <pre><code>## 
 ##   0   1 
 ## 549 342</code></pre>
-<pre class="r"><code>round(prop.table(table(train$Survived)) * 100, 0)</code></pre>
+<pre class="r"><code>prop.table(table(train$Survived))</code></pre>
 <pre><code>## 
-##  0  1 
-## 62 38</code></pre>
-<pre class="r"><code>str(data)</code></pre>
-<pre><code>## function (..., list = character(), package = NULL, lib.loc = NULL, 
-##     verbose = getOption(&quot;verbose&quot;), envir = .GlobalEnv)</code></pre>
+##         0         1 
+## 0.6161616 0.3838384</code></pre>
+<div id="impact-of-sex-v-survival" class="section level3">
+<h3>Impact of Sex v Survival ?</h3>
+<pre class="r"><code>table(train$Sex, train$Survived)</code></pre>
+<pre><code>##         
+##            0   1
+##   female  81 233
+##   male   468 109</code></pre>
+<pre class="r"><code>prop.table(table(train$Sex, train$Survived), 1)</code></pre>
+<pre><code>##         
+##                  0         1
+##   female 0.2579618 0.7420382
+##   male   0.8110919 0.1889081</code></pre>
 </div>
+</div>
+<div id="impact-of-children-v-adults" class="section level1">
+<h1>Impact of Children v Adults ?</h1>
+<pre class="r"><code>train &lt;- train %&gt;% mutate(Child = ifelse(Age &lt; 18, 1, 0))
+summary(train$Child)</code></pre>
+<pre><code>##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+##  0.0000  0.0000  0.0000  0.1583  0.0000  1.0000     177</code></pre>
 <div id="attempt-1-everyone-dies" class="section level2">
 <h2>Attempt #1 : Everyone Dies!</h2>
 <p>Simply mark everyone in the test data as Dead</p>
@@ -232,8 +250,12 @@ submission &lt;- test %&gt;%
   rowwise() %&gt;%
   mutate(Survived = survived(Sex, Pclass))
 
-create_submission_file(submission, 'attempt_3-sex-class-fare.csv')</code></pre>
+create_submission_file(submission, 'attempt_3-sex-class-fare.csv')
+
+calculate_accuracy(submission, result_data = result_data)</code></pre>
+<pre><code>## [1] 0.6913876</code></pre>
 <p>Your submission scored 0.69856</p>
+</div>
 </div>
 
 

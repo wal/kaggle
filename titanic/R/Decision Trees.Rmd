@@ -56,6 +56,7 @@ Prediction <- predict(fit, test, type = "class")
 submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 
 create_submission_file(submission, 'attempt_4-1-decision_tree.csv')
+calculate_accuracy(submission, result_data = result_data)
 
 ```
 
@@ -84,7 +85,7 @@ Prediction <- predict(fit, test, type = "class")
 submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 
 create_submission_file(submission, 'attempt_4-2-decision_tree.csv')
-
+calculate_accuracy(submission, result_data = result_data)
 ```
 
 
@@ -144,6 +145,7 @@ Prediction <- predict(fit, test, type = "class")
 
 submission <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 create_submission_file(submission, 'attempt_5-decision_tree-feature-engineering.csv')
+calculate_accuracy(submission, result_data = result_data)
 ```
 
 Your submission scored 0.79425

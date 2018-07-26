@@ -8,10 +8,17 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(caret)
+
 
 create_submission_file <- function(dataset, filename) {
   write.csv(dataset %>% select(PassengerId, Survived), 
             paste('../attempts/', filename, sep = ''), row.names = FALSE)
+}
+
+calculate_accuracy <- function(submission, result_data) {
+  cMatrix <- confusionMatrix(submission$Survived, result_data$Survived)
+  return(cMatrix$overall[["Accuracy"]])
 }
 
 ```
@@ -110,16 +117,8 @@ submission <- test %>%
 
 create_submission_file(submission, 'attempt_3-sex-class-fare.csv')
 
+calculate_accuracy(submission, result_data = result_data)
 ```
 
 
 Your submission scored 0.69856
-
-
-```{r}
-library(caret)
-
-confusionMatrix(submission$Survived, result_data$Survived)
-
-```
-

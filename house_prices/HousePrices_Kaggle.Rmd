@@ -1,0 +1,333 @@
+---
+title: "Advanced Regression"
+author: "Walter McConnell"
+date: "25 July 2018"
+output:
+  html_document:
+    theme: united
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(reshape2)
+library(plyr)
+library(gridExtra)
+library(grid)
+```
+
+```{r, echo=FALSE}
+htmltools::img(src = "https://upload.wikimedia.org/wikipedia/commons/6/62/Intercom_logo.png", 
+               alt = 'logo', 
+               style = 'position:absolute; top:0; right:0; padding:10px; width: 200px;')
+```
+
+
+# Research Question
+To predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable.
+
+### Research Evaluation Metric
+The predictive model is evaluated on Root-Mean-Squared-Error (RMSE) between the logarithm of the predicted value and the logarithm of the observed sales price. 
+
+### What is the scientific / business application ? 
+To predict future house prices from collected data 
+
+
+# Raw Data
+
+```{r, include= FALSE, warning=FALSE}
+test_data <- read_csv("data/raw/test.csv")
+```
+
+The data set describing the sale of individual residential property in Ames, Iowa from 2006 to 2010. The data set contains 2930 observations and a large number of explanatory variables (23 nominal, 23 ordinal, 14 discrete, and 20 continuous) involved in assessing home values. 
+
+### How was the data collected ?
+Collected by the Ames City Assessor’s Office as part of an 'assessment model' project. [Ames, Iowa: Alternative to the Boston Housing Data as an End of Semester Regression Project](https://ww2.amstat.org/publications/jse/v19n3/decock.pdf) 
+
+### Raw Data Structure
+
+#### Dimensions
+
+```{r, echo = FALSE}
+dim(test_data)
+```
+
+# Variables
+
+```{r variables_table, echo = FALSE}
+
+create_variables_table <- function(data) {
+  types <- test_data %>% summarise_all(class) %>% gather(Name, class)
+  unique_values <- test_data %>% summarise_all(function(x) length(unique(x))) %>% gather(Name, `Unique Values`)
+  missing_count   <- test_data %>% summarise_all(function(x) sum(is.na(x))) %>% gather(Name, `Missing Data Count`)
+  missing_percent <- test_data %>% summarise_all(function(x) round(mean(is.na(x)) * 100, 1)) %>% gather(Name, `Missing Data %`)
+
+  join_all(list(types, unique_values, missing_count, missing_percent), by='Name', type='left')  
+}
+
+create_variables_table(test_data) %>% arrange(Name) %>% kable() 
+```
+
+## Numeric Variables
+
+```{r, numeric_variables, echo = FALSE}
+
+numeric_variables <- function() {
+  create_variables_table(test_data) %>% filter(class %in% c("integer", "double", "numeric"))
+}
+
+numeric_variables() %>% .$Name %>% sort()
+```
+
+### Missing Data
+
+```{r, echo = FALSE}
+numeric_variables() %>% 
+  arrange(desc(`Missing Data %`)) %>% 
+  filter(`Missing Data %` > 0) %>% 
+  kable()
+```
+
+#### LotFrontage
+
+```{r, echo = FALSE}
+numeric_variables() %>% filter(Name == "LotFrontage") %>% kable()
+```
+
+LotFrontage represents the `Linear feet of street connected to property`. LotFrontage has 15.6%/227 rows of missing data. 15.6% of rows is too much to drop, so will impute a value instead.
+
+```{r, echo = FALSE, warning=FALSE}
+histogram <- ggplot(test_data, aes(LotFrontage)) + 
+  geom_histogram(bins = 50) +
+  geom_freqpoly(bins = 40, color = "steelblue")
+
+boxplot <- ggplot(test_data, aes(1, LotFrontage)) + 
+  geom_boxplot() + 
+  geom_point(position = "jitter", alpha = 0.5, color = "steelblue") +
+  geom_hline(yintercept = mean(test_data$LotFrontage, na.rm = TRUE), color = 'pink')
+
+grid.arrange(histogram, boxplot, ncol=2)
+```
+
+The median seems like a reasonable value to impute.
+
+```{r, echo = FALSE}
+LotFrontage_median <- median(test_data$LotFrontage, na.rm = TRUE)
+test_data <- test_data %>% mutate(LotFrontage = ifelse(is.na(LotFrontage), LotFrontage_median, LotFrontage))
+
+histogram <- ggplot(test_data, aes(LotFrontage)) + 
+  geom_histogram(bins = 50) +
+  geom_freqpoly(bins = 40, color = "steelblue")
+
+boxplot <- ggplot(test_data, aes(1, LotFrontage)) + 
+  geom_boxplot() + 
+  geom_point(position = "jitter", alpha = 0.5, color = "steelblue") +
+  geom_hline(yintercept = mean(test_data$LotFrontage, na.rm = TRUE), color = 'pink')
+
+grid.arrange(histogram, boxplot, ncol=2)
+```
+
+
+#### GarageYrBlt
+
+```{r, echo = FALSE}
+numeric_variables() %>% filter(Name == "GarageYrBlt") %>% kable()
+```
+
+GarageYrBlt has 5.3%/58 missing values. It is in fact a categorical variable and so will be recoded as a factor. NA values will be reset to the same as the YearBuilt variable. Also there is an unreasonable outlier (a year of > 2200). This will also be adjusted.
+
+```{r, echo = FALSE, warning = FALSE}
+ggplot(test_data, aes(GarageYrBlt)) + geom_bar(fill = "steelblue") 
+```
+
+
+```{r, echo = FALSE}
+test_data <- test_data %>% 
+  mutate(GarageYrBlt = ifelse((is.na(GarageYrBlt) | GarageYrBlt > 2200), YearBuilt, GarageYrBlt))
+
+test_data$GarageYrBlt <- factor(test_data$GarageYrBlt)
+test_data$YearBuilt <- factor(test_data$YearBuilt)
+
+ggplot(test_data, aes(GarageYrBlt)) + geom_bar(fill = "steelblue") 
+```
+
+
+#### MasVnrArea
+
+```{r, echo = FALSE}
+numeric_variables() %>% filter(Name == "MasVnrArea") %>% kable()
+```
+
+MasVnrArea refers to the "Masonry veneer area in square feet".
+
+```{r, echo = FALSE, warning = FALSE}
+histogram <- ggplot(test_data, aes(MasVnrArea)) + 
+  geom_histogram(bins = 50) +
+  geom_freqpoly(bins = 40, color = "steelblue")
+
+boxplot <- ggplot(test_data, aes(1, MasVnrArea)) + 
+  geom_boxplot() + 
+  geom_point(position = "jitter", alpha = 0.5, color = "steelblue")
+
+grid.arrange(histogram, boxplot, ncol=2)
+```
+
+When the MasVnrType variable is NA, the MasVnrArea variable is also na. 
+
+MasVnrArea will be set to 0, and MasVnrType will be encoded as a factor, and set to 'None' for NA's.
+
+```{r, echo = FALSE, warning = FALSE}
+test_data <- test_data %>% 
+  mutate(MasVnrArea = ifelse(is.na(MasVnrArea), 0 , MasVnrArea),
+        MasVnrType = ifelse(is.na(MasVnrType), 'None', MasVnrType))
+
+test_data$MasVnrType <- factor(test_data$MasVnrType)
+
+histogram <- ggplot(test_data, aes(MasVnrArea)) + 
+  geom_histogram(bins = 50) +
+  geom_freqpoly(bins = 40, color = "steelblue")
+
+boxplot <- ggplot(test_data, aes(1, MasVnrArea)) + 
+  geom_boxplot() + 
+  geom_point(position = "jitter", alpha = 0.5, color = "steelblue")
+
+grid.arrange(histogram, boxplot, ncol=2)
+```
+
+#### Other NA numeric variables
+
+```{r, echo = FALSE}
+numeric_variables() %>% filter(Name %in% c("BsmtFinSF1", "BsmtFinSF2", "BsmtUnfSF", "TotalBsmtSF", "BsmtFullBath", "BsmtHalfBath")) %>% kable()
+```
+
+##### Basement related NA values
+
+NA values are replaced with 0
+
+```{r, echo= FALSE}
+test_data <- test_data %>% mutate_at(vars(BsmtFinSF1, BsmtFinSF2, BsmtUnfSF, TotalBsmtSF, BsmtFullBath, BsmtHalfBath), function(x) ifelse(is.na(x),0,x))
+```
+
+#### Garage related NA values
+
+```{r, echo = FALSE}
+numeric_variables() %>% filter(Name %in% c("GarageCars", "GarageArea")) %>% kable()
+```
+
+NA values are replaced with 0
+
+```{r, echo= FALSE}
+test_data <- test_data %>% mutate_at(vars(GarageCars,GarageArea), function(x) ifelse(is.na(x),0,x))
+```
+
+All numeric variables have complete data 
+
+```{r, echo = FALSE}
+numeric_variables() %>% 
+  arrange(desc(`Missing Data %`)) %>% 
+  kable()
+```
+
+
+## Non-Numeric Variables
+
+```{r, non_numeric_variables, echo = FALSE}
+
+non_numeric_variables <- function() {
+  create_variables_table(test_data) %>% filter(!class %in% c("integer", "double", "numeric"))
+}
+
+non_numeric_variables() %>% .$Name %>% sort()
+```
+
+
+### Non Numeric Variables - Variables with Missing Data
+
+```{r, echo = FALSE}
+non_numeric_variables() %>% 
+  arrange(desc(`Missing Data %`)) %>% 
+  filter(`Missing Data %` > 0) %>%
+  kable()
+```
+
+
+#### Categorical variables with NA encoded as None
+
+From the data description, some variables are encoded as NA to represent the absense of the feature (e.g PoolQC NA == 'no Pool'). 
+
+BsmtQual, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2 = "No Basement"
+
+FireplaceQu = "No Fireplace"
+GarageType, GarageFinish, GarageQual, GarageCond,  = "No garage"
+PoolQC = "No Pool"
+Fence = "No Fence"
+MiscFeature = "None"
+
+
+
+```{r, echo = FALSE, include = FALSE}
+test_data <- test_data %>% mutate(
+  Alley = ifelse(is.na(Alley), "No alley access", Alley),
+  BsmtQual = ifelse(is.na(BsmtQual), "No Basement", BsmtQual), 
+  BsmtCond= ifelse(is.na(BsmtCond), "No Basement", BsmtCond), 
+  BsmtExposure = ifelse(is.na(BsmtExposure), "No Basement", BsmtExposure), 
+  BsmtFinType1 = ifelse(is.na(BsmtFinType1), "No Basement", BsmtFinType1), 
+  BsmtFinType2 = ifelse(is.na(BsmtFinType2), "No Basement", BsmtFinType2),
+  FireplaceQu = ifelse(is.na(FireplaceQu), "No Fireplace", FireplaceQu),
+  GarageType = ifelse(is.na(GarageType), "No Garage", GarageType), 
+  GarageFinish = ifelse(is.na(GarageFinish), "No Garage", GarageFinish), 
+  GarageQual = ifelse(is.na(GarageQual), "No Garage", GarageQual), 
+  GarageCond = ifelse(is.na(GarageCond), "No Garage", GarageCond),
+  PoolQC = ifelse(is.na(PoolQC), "No Pool", PoolQC),
+  Fence = ifelse(is.na(Fence), "No Fence",Fence),
+  MiscFeature = ifelse(is.na(MiscFeature), "None", MiscFeature))
+
+test_data$Alley <- factor(test_data$Alley)
+test_data$BsmtQual <- factor(test_data$BsmtQual)
+test_data$BsmtCond <- factor(test_data$BsmtCond)
+test_data$BsmtExposure <- factor(test_data$BsmtExposure)
+test_data$BsmtFinType1 <- factor(test_data$BsmtFinType1)
+test_data$BsmtFinType2 <- factor(test_data$BsmtFinType2)
+test_data$FireplaceQu <- factor(test_data$FireplaceQu)
+test_data$GarageType <- factor(test_data$GarageType)
+test_data$GarageFinish <- factor(test_data$GarageFinish)
+test_data$GarageQual <- factor(test_data$GarageQual)
+test_data$GarageCond <- factor(test_data$GarageCond)
+test_data$PoolQC <- factor(test_data$PoolQC)
+test_data$Fence <- factor(test_data$Fence)
+test_data$MiscFeature <- factor(test_data$MiscFeature)
+```
+
+### Non Numeric Variables - Variables with Missing Data
+
+```{r, echo = FALSE}
+non_numeric_variables() %>% 
+  arrange(desc(`Missing Data %`)) %>% 
+  filter(`Missing Data %` > 0) %>%
+  kable()
+```
+
+
+```{r, echo = FALSE}
+test_data <- test_data %>% mutate(
+  MSZoning = coalesce(MSZoning, names(sort(-table(test_data$MSZoning)))[1]),
+  Utilities = coalesce(Utilities, names(sort(-table(test_data$Utilities)))[1]),
+  Exterior1st = coalesce(Exterior1st, names(sort(-table(test_data$Exterior1st)))[1]),
+  Exterior2nd = coalesce(Exterior2nd, names(sort(-table(test_data$Exterior2nd)))[1]),
+  KitchenQual = coalesce(KitchenQual, names(sort(-table(test_data$KitchenQual)))[1]),
+  Functional = coalesce(Functional, names(sort(-table(test_data$Functional)))[1]),
+  SaleType = coalesce(SaleType, names(sort(-table(test_data$SaleType)))[1])
+)
+```
+
+### Non Numeric Variables - Variables with Missing Data
+
+```{r, echo = FALSE}
+non_numeric_variables() %>% 
+  arrange(desc(`Missing Data %`)) %>% 
+  kable()
+```
